@@ -1,5 +1,10 @@
+"""Поиск совпадений энергообъектов по эмбеддингам + признакам.
+
+Legacy: зависит от dir_common и moduls из основного репозитория Birka.
+"""
+
 import logging
-import os
+from pathlib import Path
 
 from sentence_transformers import SentenceTransformer
 from torch.nn.functional import cosine_similarity
@@ -12,22 +17,35 @@ logger = logging.getLogger(__name__)
 
 
 class GetModelML:
-    """ Получение модели для машинного обучения """
+    """Загрузка SentenceTransformer из локальной директории."""
 
     @classmethod
-    def get_model(cls, path_model: str) -> SentenceTransformer:
-        """ Получение модели для машинного обучения """
-        # Добавить к path_model путь рабочей директории
-        all_path_model = os.path.join(os.getcwd(), path_model)
-        exists(all_path_model, error=True)
-        return SentenceTransformer(
-            os.path.join(os.getcwd(), path_model)
-        )
+    def get_model(cls, path_model: str | Path) -> SentenceTransformer:
+        """Загрузить модель по относительному пути (от cwd).
+
+        Args:
+            path_model: Относительный путь к модели.
+
+        Returns:
+            Загруженная модель SentenceTransformer.
+
+        Raises:
+            FileNotFoundError: Если путь не существует.
+        """
+        full_path = Path.cwd() / path_model
+        exists(str(full_path), error=True)
+        return SentenceTransformer(str(full_path))
+
+    def __repr__(self) -> str:
+        return f"{type(self).__name__}()"
 
 
-def feature_score(name1: str,
-                  name2: str) -> float:
-    """ Оценка совпадения признаков """
+def feature_score(name1: str, name2: str) -> float:
+    """Оценка совпадения признаков (напряжение, тип) двух энергообъектов.
+
+    Returns:
+        Нормализованная оценка в диапазоне [0, 1].
+    """
     o1 = EnergyObjectName(name1)
     o2 = EnergyObjectName(name2)
 
@@ -38,43 +56,57 @@ def feature_score(name1: str,
     return (score + 2) / 4
 
 
-def calc_score(v1,
-               v2,
-               score_plus: float = 1,
-               score_minus: float = -1) -> float:
-    """Оценка совпадения признаков"""
+def calc_score(
+    v1: object,
+    v2: object,
+    score_plus: float = 1,
+    score_minus: float = -1,
+) -> float:
+    """Бинарная оценка совпадения двух значений.
+
+    Returns:
+        score_plus при совпадении, score_minus при расхождении, 0 если хотя бы одно пустое.
+    """
     if v1 and v2:
         return score_plus if v1 == v2 else score_minus
     return 0
 
 
+def find_best_match_from_model(
+    name: str,
+    name_list: list[str],
+    model: SentenceTransformer,
+    coefficient_similarity: float = 0.8,
+    coefficient_f_score: float = 0.2,
+) -> tuple[str, int, int]:
+    """Найти лучшее совпадение имени из списка кандидатов.
 
-def find_best_match_from_model(name: str,
-                               name_list: list[str],
-                               model: SentenceTransformer,
-                               coefficient_similarity: float = 0.8,
-                               coefficient_f_score: float = 0.2,
-                               ) -> tuple[str, float, int]:
-    # Кодируем имя
+    Комбинирует cosine similarity эмбеддингов и feature_score (напряжение/тип).
+
+    Args:
+        name: Искомое имя.
+        name_list: Список кандидатов.
+        model: Обученная модель SentenceTransformer.
+        coefficient_similarity: Вес cosine similarity.
+        coefficient_f_score: Вес feature_score.
+
+    Returns:
+        Кортеж (лучшее_имя, score_в_процентах, индекс).
+    """
     emb1 = model.encode(name, convert_to_tensor=True)
 
-    best_score = 0
-    best_match = None
-    best_index = None
+    best_score = 0.0
+    best_match = ""
+    best_index = 0
 
-    logger.info(f'Поиск для {name}')
+    logger.info(f"Поиск для {name}")
     for index, name2 in enumerate(name_list):
-        # Вычисляем эмбеддинг и cosine similarity
         emb2 = model.encode(name2, convert_to_tensor=True)
         similarity = max(0.0, cosine_similarity(emb1, emb2, dim=0).item())
-
-        # Вычисляем feature_score (например, от 0 до 1)
         f_score = feature_score(name, name2)
-
-        # Скомбинируем оба score — можно отрегулировать веса
         total_score = coefficient_similarity * similarity + coefficient_f_score * f_score
 
-        logger.info(f'{name2}: similarity={similarity:.3f}, feature_score={f_score:.3f}, total={total_score:.3f}')
+        logger.info(f"{name2}: similarity={similarity:.3f}, feature_score={f_score:.3f}, total={total_score:.3f}")
 
         if total_score > best_score:
             best_score = total_score
@@ -84,19 +116,15 @@ def find_best_match_from_model(name: str,
     return best_match, int(best_score * 100), best_index
 
 
-def _test_model():
+def _test_model() -> None:
     name1 = "ПС Северная 110 кВ"
-
     candidates = [
         "ПС Южная 110 кВ",
         "ПС Северная 220 кВ",
         "ТП-1 Центральная",
-        "Северный узел 110кВ"
+        "Северный узел 110кВ",
     ]
 
-    # Загружаем обученную модель
-    model = GetModelML.get_model(r'/machine_learning/machine_learning_model/model_tkz_arm_nodes')
-
+    model = GetModelML.get_model("/machine_learning/machine_learning_model/model_tkz_arm_nodes")
     best_match, score, _ = find_best_match_from_model(name1, candidates, model)
-    print(f"Лучшее совпадение: {best_match} (score={score:.3f})")
-
+    print(f"Лучшее совпадение: {best_match} (score={score})")

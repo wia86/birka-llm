@@ -1,4 +1,7 @@
-from .assistant import RAGAssistant, DEFAULT_OLLAMA_URL
+"""Пакет rag_assistant — RAG-помощник по нормативным документам."""
+
+from .assistant import DEFAULT_OLLAMA_URL, RAGAssistant
+from .llm_types import LLMProvider
 from .profiles import (
     ACTIVE_PROFILE,
     ASSISTANT_PROFILES,
@@ -10,7 +13,6 @@ from .profiles import (
     select_profile,
     set_active_profile,
 )
-from .llm_types import LLMProvider
 
 __all__ = [
     "RAGAssistant",
@@ -26,4 +28,3 @@ __all__ = [
     "select_profile",
     "set_active_profile",
 ]
-

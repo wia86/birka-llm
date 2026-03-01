@@ -1,4 +1,4 @@
-from __future__ import annotations
+"""Типы провайдеров LLM."""
 
 from typing import Literal
 

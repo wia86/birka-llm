@@ -1,0 +1,37 @@
+---
+description: Слои приложения и направление зависимостей — presentation → application → domain
+alwaysApply: true 
+--- 
+
+# Архитектура слоёв  
+
+## Слои (src/birka/)
+
+| Слой | Назначение |
+|------|------------|
+| `app/` | Точка входа |
+| `application/` | Оркестрация (Application Service Layer) |
+| `core/` | Базовые утилиты (без зависимостей от domain) |
+| `domain/` | Бизнес-логика |
+| `infrastructure/` | БД, файлы, Rastr, конфиг, почта |
+| `presentation/` | UI (wxPython) |
+
+## Направление зависимостей
+
+```
+presentation → application → domain
+                           → infrastructure
+core ← (все слои могут использовать)
+```
+
+- **presentation** вызывает только **application** (сервисы, фасады).
+- **application** оркестрирует **domain** и **infrastructure**.
+- **domain** не зависит от presentation и application.
+
+## Запрет
+
+- **Presentation не импортирует domain напрямую.**  
+  Доступ к доменной логике и данным — только через application (CalculationService, TaskService, panel_data и т.д.).
+- При добавлении фич в UI: не предлагать импорты из `domain/` в файлах из `presentation/`; использовать существующие сервисы или расширять application layer.
+
+Подробности: `ARCHITECTURE.md` в корне проекта.

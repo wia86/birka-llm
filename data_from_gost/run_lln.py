@@ -1,5 +1,4 @@
-"""Пример использования RAGAssistant с профилями настроек. GIGACHAT_API_KEY — из env."""
-from __future__ import annotations
+"""Точка входа: RAG-чат с выбором профиля (Ollama / OpenAI / GigaChat)."""
 
 import os
 import time
@@ -31,15 +30,15 @@ def build_assistant(profile_name: str = PROFILE_NAME) -> tuple[RAGAssistant, Ass
 
 
 def main() -> None:
-    """Демонстрация: выводим профиль, задаём один вопрос."""
+    """Демонстрация: выводим профиль, задаём один вопрос, затем интерактивный режим."""
     list_profiles()
     try:
         assistant, profile = build_assistant()
     except ValueError as e:
         if "API-ключ" in str(e):
-            print(f"❌ Ошибка настройки: {e}")
-            print("\n📖 Инструкции по настройке GigaChat API:")
-            print("   Откройте файл GIGACHAT_SETUP.md для подробных инструкций")
+            print(f"Ошибка настройки: {e}")
+            print("\nИнструкции по настройке GigaChat API:")
+            print("  Откройте файл GIGACHAT_SETUP.md для подробных инструкций")
             return
         raise
 
@@ -51,12 +50,10 @@ def main() -> None:
 
     print(f"Вопрос: {DEMO_QUESTION}")
     print(f"Ответ: {answer}\n")
-    print(f"⏱️  Время ответа: {query_time:.2f}с\n")
+    print(f"Время ответа: {query_time:.2f}с\n")
 
-    # Для интерактивного режима:
     assistant.chat()
 
 
 if __name__ == "__main__":
     main()
-

@@ -1,4 +1,4 @@
-from __future__ import annotations
+"""RAG-помощник: Chroma + Embeddings + LLM (Ollama / OpenAI / GigaChat)."""
 
 import os
 from importlib import import_module
@@ -36,18 +36,29 @@ OPENAI_ERROR_CLS = cast(type[Exception] | None, _load_optional_class("openai", "
 
 
 class RAGAssistant:
-    """Технический помощник на основе RAG (Retrieval-Augmented Generation)."""
+    """Технический помощник на основе RAG (Retrieval-Augmented Generation).
 
-    DEFAULT_TEMPLATE = """Ты — технический помощник программы "Бирка".
-    Отвечай строго по предоставленным документам, ГОСТам и коду.
-    Если не знаешь — скажи "Я не нашел информацию по этому вопросу".
-    При ответе давай ссылки на пункты нормативов, руководства пользователя.
+    Args:
+        persist_directory: Путь к векторной базе данных.
+        model_name: Название модели для embeddings.
+        llm_model: Название модели LLM (зависит от провайдера).
+        temperature: Температура генерации.
+        top_k: Количество документов для поиска.
+        template: Опциональный шаблон промпта.
+        preload: Предзагрузить ли модели сразу.
+        llm_provider: Провайдер LLM.
+        llm_api_base: Базовый URL сетевого API.
+        llm_api_key: Ключ доступа к сетевой LLM.
+    """
 
-    Контекст из документов:
-    {context}
-
-    Вопрос пользователя: {question}
-    Ответ:"""
+    DEFAULT_TEMPLATE = (
+        'Ты — технический помощник программы "Бирка".\n'
+        "Отвечай строго по предоставленным документам, ГОСТам и коду.\n"
+        'Если не знаешь — скажи "Я не нашел информацию по этому вопросу".\n'
+        "При ответе давай ссылки на пункты нормативов, руководства пользователя.\n\n"
+        "Контекст из документов:\n{context}\n\n"
+        "Вопрос пользователя: {question}\nОтвет:"
+    )
 
     def __init__(
         self,
@@ -62,19 +73,6 @@ class RAGAssistant:
         llm_api_base: str | None = None,
         llm_api_key: str | None = None,
     ) -> None:
-        """
-        Args:
-            persist_directory: Путь к векторной базе данных.
-            model_name: Название модели для embeddings.
-            llm_model: Название модели LLM (зависит от провайдера).
-            temperature: Температура генерации.
-            top_k: Количество документов для поиска.
-            template: Опциональный шаблон промпта.
-            preload: Предзагрузить ли модели сразу.
-            llm_provider: Провайдер LLM.
-            llm_api_base: Базовый URL сетевого API.
-            llm_api_key: Ключ доступа к сетевой LLM.
-        """
         self.persist_directory = Path(persist_directory)
         self.model_name = model_name
         self.llm_model = llm_model
@@ -94,6 +92,12 @@ class RAGAssistant:
         if preload:
             self._preload_models()
 
+    def __repr__(self) -> str:
+        return (
+            f"RAGAssistant(llm={self.llm_model!r}, provider={self.llm_provider!r}, "
+            f"embeddings={self.model_name!r}, top_k={self.top_k})"
+        )
+
     def _validate_paths(self) -> None:
         """Проверка существования векторной базы."""
         if not self.persist_directory.exists():
@@ -104,26 +108,26 @@ class RAGAssistant:
 
     def _preload_models(self) -> None:
         """Предзагрузка всех моделей для быстрого старта."""
-        print("🚀 Предзагрузка моделей...")
+        print("Предзагрузка моделей...")
 
-        print(f"  📥 Загрузка embeddings модели: {self.model_name}")
+        print(f"  Загрузка embeddings модели: {self.model_name}")
         self._embeddings = self._initialize_embeddings()
 
         print(
-            "  📥 Загрузка LLM модели: "
+            f"  Загрузка LLM модели: "
             f"{self.llm_model} ({self.llm_provider}, {self.llm_api_base or 'локально'})"
         )
         self._llm = self._initialize_llm()
 
-        print("  🔥 Прогрев LLM...")
+        print("  Прогрев LLM...")
         try:
             self._llm.invoke("test")
         except self._network_exceptions() as e:
-            print(f"  ⚠️  Предупреждение: {self._provider_connection_hint(e)}")
+            print(f"  Предупреждение: {self._provider_connection_hint(e)}")
         except Exception:
             pass
 
-        print("✓ Все модели загружены и готовы!\n")
+        print("Все модели загружены и готовы!\n")
 
     def _initialize_embeddings(self) -> HuggingFaceEmbeddings:
         """Инициализация модели embeddings."""
@@ -173,15 +177,14 @@ class RAGAssistant:
         return ChatOllama(**client_kwargs)
 
     def _create_openai_llm(self) -> BaseChatModel:
-        """Создание клиента для OpenAI-совместимого сетевого API."""
-        if ChatOpenAICls is None:  # pragma: no cover - ветка только без зависимости
+        """Создание клиента для OpenAI-совместимого сетевого API (включая GigaChat)."""
+        if ChatOpenAICls is None:
             raise ImportError(
                 "Модуль langchain-openai не установлен. "
                 "Установите 'langchain-openai' и 'openai', чтобы использовать сетевую LLM."
             )
 
-        # Для GigaChat используем отдельную переменную окружения
-        if "gigachat" in self.llm_api_base.lower():
+        if self.llm_api_base and "gigachat" in self.llm_api_base.lower():
             api_key = self.llm_api_key or os.getenv("GIGACHAT_API_KEY")
             env_var_name = "GIGACHAT_API_KEY"
         else:
@@ -207,15 +210,15 @@ class RAGAssistant:
     @staticmethod
     def _network_exceptions() -> tuple[type[Exception], ...]:
         """Кортеж сетевых исключений для переиспользования."""
-        base_exceptions: tuple[type[Exception], ...] = (
+        base: tuple[type[Exception], ...] = (
             ConnectionError,
             httpx.ConnectError,
             requests.exceptions.ConnectionError,
             requests.exceptions.RequestException,
         )
         if OPENAI_ERROR_CLS is not None:
-            return base_exceptions + (OPENAI_ERROR_CLS,)
-        return base_exceptions
+            return base + (OPENAI_ERROR_CLS,)
+        return base
 
     def _provider_connection_hint(self, error: Exception) -> str:
         """Формирование сообщения о проблеме подключения."""
@@ -224,25 +227,22 @@ class RAGAssistant:
             return (
                 "Ollama недоступна.\n"
                 "Проверьте, что:\n"
-                f"1. Сервис Ollama запущен и доступен по адресу {url_hint}\n"
-                f"2. Модель {self.llm_model} загружена (ollama pull {self.llm_model})\n"
+                f"  1. Сервис Ollama запущен и доступен по адресу {url_hint}\n"
+                f"  2. Модель {self.llm_model} загружена (ollama pull {self.llm_model})\n"
                 f"Детали ошибки: {error}"
             )
 
         base_url = self.llm_api_base or "https://api.openai.com/v1"
-
-        # Определяем название переменной окружения в зависимости от провайдера
-        if "gigachat" in base_url.lower():
-            env_var_hint = "GIGACHAT_API_KEY"
-        else:
-            env_var_hint = "OPENAI_API_KEY"
+        env_var_hint = (
+            "GIGACHAT_API_KEY" if "gigachat" in base_url.lower() else "OPENAI_API_KEY"
+        )
 
         return (
             "Сетевая LLM недоступна.\n"
             "Проверьте настройки API:\n"
-            f"1. Корректен ли base_url ({base_url})\n"
-            f"2. Задан ли API-ключ (параметр llm_api_key или переменная {env_var_hint})\n"
-            "3. Разрешен ли доступ к модели у провайдера\n"
+            f"  1. Корректен ли base_url ({base_url})\n"
+            f"  2. Задан ли API-ключ (параметр llm_api_key или переменная {env_var_hint})\n"
+            "  3. Разрешен ли доступ к модели у провайдера\n"
             f"Детали ошибки: {error}"
         )
 
@@ -291,16 +291,15 @@ class RAGAssistant:
                 if not question:
                     continue
 
-                print("\nОтвет:", self.ask(question), "\n")
+                print(f"\nОтвет: {self.ask(question)}\n")
 
             except KeyboardInterrupt:
                 print("\n\nДо свидания!")
                 break
             except self._network_exceptions() as e:
-                print(f"\n❌ Ошибка подключения: {self._provider_connection_hint(e)}\n")
+                print(f"\nОшибка подключения: {self._provider_connection_hint(e)}\n")
             except Exception as e:
-                print(f"\n❌ Ошибка: {e}\n")
+                print(f"\nОшибка: {e}\n")
 
 
 __all__ = ["RAGAssistant", "DEFAULT_OLLAMA_URL"]
-

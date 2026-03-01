@@ -1,54 +1,68 @@
+"""OAuth-аутентификация для GigaChat API (получение access_token)."""
 
-API_KEY = "MDE5YWJhNmItMmQ2OS03ZGI1LTg2N2ItZmY3MzI3NzJkZjQzOmQzNjI1NTBhLWI5NjMtNDg2Zi1hMzJhLTFkMzgwODY2MmRjZA=="
-
-# giga_oauth_working.py
-import requests
 import base64
+import os
 import uuid
+
+import requests
 import urllib3
 
 urllib3.disable_warnings(urllib3.exceptions.InsecureRequestWarning)
 
-# ←←←←←←←←←←←←←←←←←←←←←←←←←←←←←←←←←←←←
-CLIENT_ID     = "019aba6b-2d69-7db5-867b-ff732772df43"      # например: 1a2b3c4d-...
-CLIENT_SECRET = API_KEY  # например: 5e6f7g8h-...
-# ←←←←←←←←←←←←←←←←←←←←←←←←←←←←←←←←←←←←
+OAUTH_URL = "https://ngw.devices.sberbank.ru:9443/api/v2/oauth"
 
-# Правильная base64-кодировка (именно так хочет Сбер)
-auth_string = f"{CLIENT_ID}:{CLIENT_SECRET}"
-auth_bytes  = auth_string.encode("utf-8")
-auth_base64 = base64.b64encode(auth_bytes).decode("utf-8")
 
-oauth_url = "https://ngw.devices.sberbank.ru:9443/api/v2/oauth"
+def get_gigachat_token(client_id: str, client_secret: str, scope: str = "GIGACHAT_API_PERS") -> str:
+    """Получить access_token для GigaChat через OAuth.
 
-payload = {
-    "scope": "GIGACHAT_API_PERS"
-}
+    Args:
+        client_id: UUID приложения из личного кабинета Сбера.
+        client_secret: API-ключ (или секрет приложения).
+        scope: Scope токена (GIGACHAT_API_PERS / GIGACHAT_API_CORP).
 
-headers = {
-    "Content-Type": "application/x-www-form-urlencoded",
-    "Accept": "application/json",
-    "RqUID": str(uuid.uuid4()),
-    "Authorization": f"Basic {auth_base64}"   # ← вот так точно работает
-}
+    Returns:
+        access_token (действует ~30 минут).
 
-response = requests.post(
-    oauth_url,
-    data=payload,
-    headers=headers,
-    verify=False,          # отключаем проверку сертификата
-    timeout=30
-)
+    Raises:
+        RuntimeError: Если OAuth-запрос завершился ошибкой.
+    """
+    auth_b64 = base64.b64encode(f"{client_id}:{client_secret}".encode()).decode()
 
-print("Статус OAuth:", response.status_code)
-print(response.json())
+    headers = {
+        "Content-Type": "application/x-www-form-urlencoded",
+        "Accept": "application/json",
+        "RqUID": str(uuid.uuid4()),
+        "Authorization": f"Basic {auth_b64}",
+    }
 
-if response.status_code == 200:
-    access_token = response.json()["access_token"]
-    print("\nТокен получен! Действует ≈ 30 минут")
-    print(access_token[:50] + "...")
-else:
-    print("\nНе получилось. Самые частые причины:")
-    print("1. Client ID или Client Secret скопированы с пробелами")
-    print("2. В личном кабинете выбран scope GIGACHAT_API_CORP вместо PERS")
-    print("3. Приложение не подтверждено (для PERS обычно подтверждается мгновенно)")
+    response = requests.post(
+        OAUTH_URL,
+        data={"scope": scope},
+        headers=headers,
+        verify=False,
+        timeout=30,
+    )
+
+    if response.status_code != 200:
+        raise RuntimeError(
+            f"OAuth ошибка ({response.status_code}): {response.text}\n"
+            "Частые причины:\n"
+            "  1. Client ID / Secret скопированы с пробелами\n"
+            "  2. Scope не соответствует типу подписки\n"
+            "  3. Приложение не подтверждено в личном кабинете"
+        )
+
+    data = response.json()
+    return data["access_token"]
+
+
+if __name__ == "__main__":
+    _client_id = os.environ.get("GIGACHAT_CLIENT_ID", "")
+    _client_secret = os.environ.get("GIGACHAT_API_KEY", "")
+
+    if not _client_id or not _client_secret:
+        print("Задайте переменные окружения GIGACHAT_CLIENT_ID и GIGACHAT_API_KEY")
+        raise SystemExit(1)
+
+    token = get_gigachat_token(_client_id, _client_secret)
+    print(f"Токен получен! {token[:50]}...")

@@ -1,4 +1,4 @@
-from __future__ import annotations
+"""Профили конфигурации RAGAssistant (Ollama / OpenAI / GigaChat)."""
 
 import os
 from dataclasses import dataclass
@@ -15,7 +15,21 @@ def _get_persist_directory() -> Path:
 
 @dataclass(slots=True, frozen=True)
 class AssistantProfile:
-    """Профиль конфигурации для запуска RAGAssistant."""
+    """Профиль конфигурации для запуска RAGAssistant.
+
+    Attributes:
+        name: Человеко-читаемое название профиля.
+        persist_directory: Путь к векторной базе Chroma.
+        model_name: Модель embeddings (HuggingFace).
+        llm_model: Модель LLM.
+        llm_provider: Провайдер LLM.
+        llm_api_base: Базовый URL API (None для локального).
+        llm_api_key: API-ключ (None — из переменной окружения).
+        temperature: Температура генерации.
+        top_k: Количество документов для поиска.
+        preload: Предзагружать модели при старте.
+        description: Описание профиля.
+    """
 
     name: str
     persist_directory: Path
@@ -54,11 +68,8 @@ def _profiles() -> dict[str, AssistantProfile]:
             model_name="BAAI/bge-m3",
             llm_model="qwen3-vl:8b",
             llm_provider="ollama",
-            llm_api_base=None,
-            llm_api_key=None,
             temperature=0.2,
             top_k=6,
-            preload=True,
         ),
         "openai_cloud": AssistantProfile(
             name="OpenAI-совместимый API",
@@ -67,24 +78,22 @@ def _profiles() -> dict[str, AssistantProfile]:
             model_name="BAAI/bge-m3",
             llm_model="gpt-4o-mini",
             llm_provider="openai",
-            llm_api_base=None,
-            llm_api_key=None,
             temperature=0.2,
             top_k=6,
-            preload=True,
         ),
         "gigachat": AssistantProfile(
             name="GigaChat",
-            description="Российская LLM от Сбера через API (Scope: GIGACHAT_API_PERS). Требуется API ключ из переменной GIGACHAT_API_KEY",
+            description=(
+                "Российская LLM от Сбера через API (Scope: GIGACHAT_API_PERS). "
+                "Требуется API-ключ из переменной GIGACHAT_API_KEY"
+            ),
             persist_directory=persist,
             model_name="BAAI/bge-m3",
             llm_model="GigaChat-2",
             llm_provider="openai",
             llm_api_base="https://gigachat.devices.sberbank.ru/api/v1/",
-            llm_api_key=None,
             temperature=0.2,
             top_k=6,
-            preload=True,
         ),
     }
 
@@ -97,23 +106,24 @@ ACTIVE_PROFILE = DEFAULT_PROFILE
 
 def available_profile_names() -> list[str]:
     """Возвращает список доступных профилей."""
-    return list(ASSISTANT_PROFILES.keys())
+    return list(ASSISTANT_PROFILES)
 
 
 def select_profile(profile_name: str) -> AssistantProfile:
-    """Получить профиль по имени с дружелюбной ошибкой."""
-    try:
-        return ASSISTANT_PROFILES[profile_name]
-    except KeyError as exc:
+    """Получить профиль по имени.
+
+    Raises:
+        ValueError: Если профиль не найден.
+    """
+    if profile_name not in ASSISTANT_PROFILES:
         available = ", ".join(available_profile_names())
-        raise ValueError(
-            f"Профиль '{profile_name}' не найден. Доступные варианты: {available}"
-        ) from exc
+        raise ValueError(f"Профиль '{profile_name}' не найден. Доступные: {available}")
+    return ASSISTANT_PROFILES[profile_name]
 
 
 def format_profiles() -> str:
     """Формирует текстовое описание всех профилей."""
-    lines = []
+    lines: list[str] = []
     for key, profile in ASSISTANT_PROFILES.items():
         lines.append(
             f"- {key}: {profile.name}\n"
@@ -149,4 +159,3 @@ __all__ = [
     "set_active_profile",
     "get_active_profile",
 ]
-

@@ -1,26 +1,30 @@
-import base64
-import requests
+"""Утилита для получения токена GigaChat API.
+
+В современных версиях GigaChat API (2024+) API-ключ используется напрямую
+без дополнительной OAuth-аутентификации.
+"""
 
 
 def gigachat_get_token(client_id: str, client_secret: str) -> str:
-    """
-    Получить токен для GigaChat API.
+    """Получить токен для GigaChat API.
 
-    В современных версиях GigaChat API (2024+) API ключ можно использовать напрямую
-    без дополнительной OAuth аутентификации.
+    Args:
+        client_id: UUID приложения (для совместимости, не используется).
+        client_secret: API-ключ GigaChat.
 
-    Параметры:
-        - client_id: выдан Сбером (для совместимости, не используется)
-        - client_secret: API ключ GigaChat
-
-    Возвращает:
-        - access_token (str): API ключ для использования в заголовке Authorization: Bearer {token}
+    Returns:
+        API-ключ для заголовка ``Authorization: Bearer {token}``.
     """
     return client_secret
 
-token = gigachat_get_token(
-    client_id="019aba6b-2d69-7db5-867b-ff732772df43",
-    client_secret="d362550a-b963-486f-a32a-1d3808662dcd"
-)
 
-print(token)
+if __name__ == "__main__":
+    import os
+
+    _id = os.environ.get("GIGACHAT_CLIENT_ID", "")
+    _secret = os.environ.get("GIGACHAT_API_KEY", "")
+    if not _secret:
+        print("Задайте переменную окружения GIGACHAT_API_KEY")
+        raise SystemExit(1)
+
+    print(gigachat_get_token(_id, _secret))
