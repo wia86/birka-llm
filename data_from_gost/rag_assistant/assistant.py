@@ -17,6 +17,7 @@ from langchain_core.runnables import Runnable, RunnableLambda, RunnablePassthrou
 from langchain_huggingface import HuggingFaceEmbeddings
 from langchain_ollama import ChatOllama
 
+from .giga_get_token import gigachat_get_bearer_token
 from .llm_types import LLMProvider
 
 DEFAULT_OLLAMA_URL = "http://127.0.0.1:11434"
@@ -209,7 +210,14 @@ class RAGAssistant:
             return self.llm_api_key, "llm_api_key"
         base = (self.llm_api_base or "").lower()
         if "gigachat" in base:
-            return os.getenv("GIGACHAT_API_KEY", ""), "GIGACHAT_API_KEY"
+            try:
+                return gigachat_get_bearer_token(), "GIGACHAT_API_KEY"
+            except (ValueError, RuntimeError) as e:
+                raise ValueError(
+                    f"GigaChat: не удалось получить OAuth-токен. {e}\n"
+                    "Задайте GIGACHAT_API_KEY (ключ из кабинета или Client Secret). "
+                    "При отдельном Client ID — также GIGACHAT_CLIENT_ID. См. GIGACHAT_SETUP.md"
+                ) from e
         if "openrouter" in base:
             return os.getenv("OPENROUTER_API_KEY", ""), "OPENROUTER_API_KEY"
         if "groq" in base:
