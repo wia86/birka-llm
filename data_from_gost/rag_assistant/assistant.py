@@ -214,7 +214,33 @@ class RAGAssistant:
             return os.getenv("OPENROUTER_API_KEY", ""), "OPENROUTER_API_KEY"
         if "groq" in base:
             return os.getenv("GROQ_API_KEY", ""), "GROQ_API_KEY"
+        if "deepseek" in base:
+            return os.getenv("DEEPSEEK_API_KEY", ""), "DEEPSEEK_API_KEY"
         return os.getenv("OPENAI_API_KEY", ""), "OPENAI_API_KEY"
+
+    @staticmethod
+    def _is_false_env(raw: str) -> bool:
+        """Преобразует строку env в булево "ложь" (0/false/no/off)."""
+        return raw.strip().lower() in {"0", "false", "no", "off"}
+
+    def _resolve_tls_verify(self) -> bool | str:
+        """Определяет TLS verify для HTTP-клиента OpenAI-совместимых провайдеров.
+
+        Поддерживаемые переменные окружения:
+        - GIGACHAT_VERIFY_SSL_CERTS=0|false|no|off (отключить verify только для gigachat)
+        - GIGACHAT_CA_BUNDLE_FILE=<путь до PEM/CRT>
+        - RAG_CA_BUNDLE_FILE=<путь до PEM/CRT> (для всех openai-совместимых)
+        """
+        base = (self.llm_api_base or "").lower()
+        if "gigachat" in base and self._is_false_env(os.getenv("GIGACHAT_VERIFY_SSL_CERTS", "")):
+            return False
+
+        for env_name in ("GIGACHAT_CA_BUNDLE_FILE", "RAG_CA_BUNDLE_FILE"):
+            bundle_path = os.getenv(env_name, "").strip()
+            if bundle_path:
+                return bundle_path
+
+        return True
 
     def _create_openai_llm(self) -> BaseChatModel:
         """Создание клиента для OpenAI-совместимого сетевого API (GigaChat, OpenRouter, Groq, OpenAI)."""
@@ -239,6 +265,10 @@ class RAGAssistant:
         }
         if self.llm_api_base:
             client_kwargs["base_url"] = self.llm_api_base
+        tls_verify = self._resolve_tls_verify()
+        if tls_verify is not True:
+            # Явный httpx-клиент нужен, чтобы передать custom CA bundle/verify=False.
+            client_kwargs["http_client"] = httpx.Client(verify=tls_verify)
 
         return ChatOpenAICls(**client_kwargs)
 

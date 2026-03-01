@@ -1,5 +1,13 @@
 """Точка входа: RAG-чат с выбором профиля (Ollama / OpenAI / GigaChat)."""
 
+import sys
+if hasattr(sys.stdout, "reconfigure"):
+    try:
+        sys.stdout.reconfigure(encoding="utf-8")
+        sys.stderr.reconfigure(encoding="utf-8")
+    except (AttributeError, OSError):
+        pass
+
 import os
 import time
 from pathlib import Path
@@ -13,7 +21,7 @@ from rag_assistant import (
     set_active_profile,
 )
 
-load_dotenv(Path(__file__).resolve().parent.parent / ".env")
+load_dotenv(Path(__file__).resolve().parent.parent / ".env", override=True)
 
 # Профиль: явный RAG_PROFILE или облачная модель из RAG_CLOUD_MODEL, иначе локальная Ollama
 PROFILE_NAME = (

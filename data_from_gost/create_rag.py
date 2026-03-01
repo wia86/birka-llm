@@ -1,5 +1,13 @@
 """Создание RAG векторной базы (PDF → Chroma) с эмбеддингами."""
 
+import sys
+if hasattr(sys.stdout, "reconfigure"):
+    try:
+        sys.stdout.reconfigure(encoding="utf-8")
+        sys.stderr.reconfigure(encoding="utf-8")
+    except (AttributeError, OSError):
+        pass
+
 import hashlib
 import json
 import os
@@ -204,7 +212,7 @@ def _run_per_file(
         _write_rag_meta(subdir, model_name)
         total_docs += len(docs)
         total_chunks += len(chunks)
-        print(f"  Страниц: {len(docs)}, чанков: {len(chunks)} → {subdir}")
+        print(f"  Страниц: {len(docs)}, чанков: {len(chunks)} -> {subdir}")
     # Метаданные в корне каталога — какая модель у всей базы
     _write_rag_meta(base, model_name)
     total_time = time.time() - start_time
