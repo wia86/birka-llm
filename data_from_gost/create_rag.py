@@ -205,6 +205,8 @@ def _run_per_file(
         total_docs += len(docs)
         total_chunks += len(chunks)
         print(f"  Страниц: {len(docs)}, чанков: {len(chunks)} → {subdir}")
+    # Метаданные в корне каталога — какая модель у всей базы
+    _write_rag_meta(base, model_name)
     total_time = time.time() - start_time
     print("\n" + "=" * 60)
     print("СТАТИСТИКА (per_file)")

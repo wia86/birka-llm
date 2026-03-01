@@ -15,7 +15,10 @@ from rag_assistant import (
 
 load_dotenv(Path(__file__).resolve().parent.parent / ".env")
 
-PROFILE_NAME = os.environ.get("RAG_PROFILE", "ollama_local")
+# Профиль: явный RAG_PROFILE или облачная модель из RAG_CLOUD_MODEL, иначе локальная Ollama
+PROFILE_NAME = (
+    os.environ.get("RAG_PROFILE") or os.environ.get("RAG_CLOUD_MODEL") or "ollama_local"
+)
 DEMO_QUESTION = os.environ.get("RAG_DEMO_QUESTION", "query: какие есть схемно-режимные мероприятия?")
 
 
