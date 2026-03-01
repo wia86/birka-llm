@@ -31,6 +31,29 @@ def _is_e5_model(model_name: str) -> bool:
     return "e5" in (model_name or "").lower()
 
 
+CHROMA_DB_NAME = "chroma.sqlite3"
+
+
+def _resolve_chroma_persist_directory(base: Path) -> Path:
+    """Если база создана в режиме per_file, чанки лежат во вложенных папках; возвращаем каталог с данными.
+
+    В per_file create_rag пишет Chroma в base / ... / <subdir>/ (путь может быть вложенным).
+    Рекурсивно ищем все каталоги с chroma.sqlite3; если есть не корень — берём самый глубокий (там данные).
+    """
+    base = base.resolve()
+    if not base.is_dir():
+        return base
+    candidates = [
+        p.parent for p in base.rglob(CHROMA_DB_NAME)
+        if p.is_file()
+    ]
+    # Исключаем корень; из оставшихся берём самый глубокий путь (per_file лежит глубже)
+    non_root = [c for c in candidates if c != base]
+    if non_root:
+        return max(non_root, key=lambda p: len(p.parts))
+    return base
+
+
 def _read_rag_embedding_model(persist_directory: Path) -> str | None:
     """Читает из каталога RAG модель эмбеддингов, которой создана база. None если файла нет."""
     path = persist_directory / RAG_META_FILENAME
@@ -121,11 +144,18 @@ class RAGAssistant:
         )
 
     def _validate_paths(self) -> None:
-        """Проверка существования векторной базы."""
-        if not self.persist_directory.exists():
+        """Проверка существования векторной базы (корень или подпапка per_file)."""
+        base = self.persist_directory
+        if not base.exists():
             raise FileNotFoundError(
-                f"Векторная база не найдена: {self.persist_directory}\n"
+                f"Векторная база не найдена: {base}\n"
                 f"Сначала создайте базу с помощью create_rag.py"
+            )
+        effective = _resolve_chroma_persist_directory(base)
+        if not (effective / CHROMA_DB_NAME).exists():
+            raise FileNotFoundError(
+                f"В каталоге {base} не найдена Chroma-база (chroma.sqlite3). "
+                f"Запустите create_rag.py для создания RAG."
             )
 
     def _preload_models(self) -> None:
@@ -163,15 +193,20 @@ class RAGAssistant:
         return self._embeddings
 
     def _initialize_vectorstore(self, embeddings: HuggingFaceEmbeddings) -> Chroma:
-        """Загрузка векторной базы данных."""
-        stored_model = _read_rag_embedding_model(self.persist_directory)
+        """Загрузка векторной базы данных. При per_file использует вложенную папку с chroma.sqlite3."""
+        base = self.persist_directory.resolve()
+        effective = _resolve_chroma_persist_directory(base)
+        if effective != base:
+            print(f"  RAG: используется база из подкаталога (per_file): {effective.relative_to(base)}")
+        stored_model = _read_rag_embedding_model(effective)
         if stored_model is not None and stored_model != self.model_name:
             print(
                 f"Внимание: база RAG создана моделью {stored_model!r}, "
                 f"сейчас используется {self.model_name!r}. Рекомендуется пересобрать базу или выбрать ту же модель."
             )
+        persist_path = str(effective)
         return Chroma(
-            persist_directory=str(self.persist_directory),
+            persist_directory=persist_path,
             embedding_function=embeddings,
         )
 
@@ -317,10 +352,27 @@ class RAGAssistant:
             f"Детали ошибки: {error}"
         )
 
+    @staticmethod
+    def _format_docs(docs: list) -> str:
+        """Преобразует список Document в одну строку для подстановки в промпт."""
+        if not docs:
+            return "(релевантные фрагменты не найдены)"
+        parts = []
+        for d in docs:
+            text = getattr(d, "page_content", str(d))
+            if isinstance(text, str) and text.strip():
+                parts.append(text.strip())
+        return "\n\n---\n\n".join(parts) if parts else "(релевантные фрагменты не найдены)"
+
     def _build_chain(self) -> Runnable:
         """Построение цепочки RAG."""
         embeddings = self._initialize_embeddings()
         vectorstore = self._initialize_vectorstore(embeddings)
+        try:
+            n = vectorstore._collection.count()
+            print(f"  RAG: в базе {n} чанков")
+        except Exception:
+            pass
         base_retriever = vectorstore.as_retriever(search_kwargs={"k": self.top_k})
         if _is_e5_model(self.model_name):
             retriever = RunnableLambda(
@@ -328,11 +380,17 @@ class RAGAssistant:
             )
         else:
             retriever = base_retriever
+        # В промпт должен попадать текст чанков, а не список объектов
+        context_str = RunnableLambda(
+            lambda x: (
+                self._format_docs(x) if isinstance(x, list) else self._format_docs([x])
+            )
+        )
         llm = self._initialize_llm()
         prompt = PromptTemplate.from_template(self.template)
 
         return (
-            {"context": retriever, "question": RunnablePassthrough()}
+            {"context": retriever | context_str, "question": RunnablePassthrough()}
             | prompt
             | llm
             | StrOutputParser()

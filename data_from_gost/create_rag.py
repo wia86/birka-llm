@@ -28,13 +28,19 @@ load_dotenv(Path(__file__).resolve().parent.parent / ".env")
 RAG_META_FILENAME = ".rag_embedding_meta.json"
 
 
-def _write_rag_meta(persist_directory: str | Path, model_name: str) -> None:
-    """Записывает в каталог RAG метаданные: какая модель эмбеддингов использована."""
+def _write_rag_meta(
+    persist_directory: str | Path,
+    model_name: str,
+    source_files: list[str] | None = None,
+) -> None:
+    """Записывает в каталог RAG метаданные: модель эмбеддингов и исходные файлы."""
     path = Path(persist_directory) / RAG_META_FILENAME
-    meta = {
+    meta: dict[str, object] = {
         "embedding_model": model_name,
         "created_at": datetime.now(UTC).isoformat(),
     }
+    if source_files:
+        meta["source_files"] = source_files
     path.write_text(json.dumps(meta, ensure_ascii=False, indent=2), encoding="utf-8")
 
 
@@ -157,7 +163,11 @@ def _run_common(
             embedding=embeddings,
             persist_directory=persist_directory,
         )
-    _write_rag_meta(persist_directory, model_name)
+    _write_rag_meta(
+        persist_directory,
+        model_name,
+        source_files=[str(p) for p in pdf_paths],
+    )
     total_time = time.time() - start_time
     _print_stats(
         total_docs=len(all_docs),
@@ -209,12 +219,12 @@ def _run_per_file(
                 embedding=embeddings,
                 persist_directory=str(subdir),
             )
-        _write_rag_meta(subdir, model_name)
+        _write_rag_meta(subdir, model_name, source_files=[str(path)])
         total_docs += len(docs)
         total_chunks += len(chunks)
         print(f"  Страниц: {len(docs)}, чанков: {len(chunks)} -> {subdir}")
-    # Метаданные в корне каталога — какая модель у всей базы
-    _write_rag_meta(base, model_name)
+    # Метаданные в корне каталога — модель и список всех исходных PDF
+    _write_rag_meta(base, model_name, source_files=[str(p) for p in pdf_paths])
     total_time = time.time() - start_time
     print("\n" + "=" * 60)
     print("СТАТИСТИКА (per_file)")
