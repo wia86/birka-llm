@@ -20,9 +20,8 @@ __pycache__/
 *.swp
 *.swo
 
-# Chroma / data (optional: commit small indexes or ignore)
-# *.db
-# data/
+# Каталог векторных баз RAG (RAG_PERSIST_DIR по умолчанию ./data/chroma_default)
+data/
 
 # OS
 Thumbs.db

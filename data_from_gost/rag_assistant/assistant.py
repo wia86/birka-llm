@@ -1,5 +1,6 @@
 """RAG-помощник: Chroma + Embeddings + LLM (Ollama / OpenAI / GigaChat)."""
 
+import json
 import os
 from importlib import import_module
 from pathlib import Path
@@ -12,13 +13,33 @@ from langchain_chroma import Chroma
 from langchain_core.language_models.chat_models import BaseChatModel
 from langchain_core.output_parsers import StrOutputParser
 from langchain_core.prompts import PromptTemplate
-from langchain_core.runnables import Runnable, RunnablePassthrough
+from langchain_core.runnables import Runnable, RunnableLambda, RunnablePassthrough
 from langchain_huggingface import HuggingFaceEmbeddings
 from langchain_ollama import ChatOllama
 
 from .llm_types import LLMProvider
 
 DEFAULT_OLLAMA_URL = "http://127.0.0.1:11434"
+
+
+RAG_META_FILENAME = ".rag_embedding_meta.json"
+
+
+def _is_e5_model(model_name: str) -> bool:
+    """Проверка, что модель E5 (требует префикса query: для запроса)."""
+    return "e5" in (model_name or "").lower()
+
+
+def _read_rag_embedding_model(persist_directory: Path) -> str | None:
+    """Читает из каталога RAG модель эмбеддингов, которой создана база. None если файла нет."""
+    path = persist_directory / RAG_META_FILENAME
+    if not path.is_file():
+        return None
+    try:
+        data = json.loads(path.read_text(encoding="utf-8"))
+        return data.get("embedding_model") or None
+    except (json.JSONDecodeError, OSError):
+        return None
 
 
 def _load_optional_class(module_name: str, attr_name: str) -> type | None:
@@ -142,6 +163,12 @@ class RAGAssistant:
 
     def _initialize_vectorstore(self, embeddings: HuggingFaceEmbeddings) -> Chroma:
         """Загрузка векторной базы данных."""
+        stored_model = _read_rag_embedding_model(self.persist_directory)
+        if stored_model is not None and stored_model != self.model_name:
+            print(
+                f"Внимание: база RAG создана моделью {stored_model!r}, "
+                f"сейчас используется {self.model_name!r}. Рекомендуется пересобрать базу или выбрать ту же модель."
+            )
         return Chroma(
             persist_directory=str(self.persist_directory),
             embedding_function=embeddings,
@@ -250,7 +277,13 @@ class RAGAssistant:
         """Построение цепочки RAG."""
         embeddings = self._initialize_embeddings()
         vectorstore = self._initialize_vectorstore(embeddings)
-        retriever = vectorstore.as_retriever(search_kwargs={"k": self.top_k})
+        base_retriever = vectorstore.as_retriever(search_kwargs={"k": self.top_k})
+        if _is_e5_model(self.model_name):
+            retriever = RunnableLambda(
+                lambda q: base_retriever.invoke("query: " + q if isinstance(q, str) else q)
+            )
+        else:
+            retriever = base_retriever
         llm = self._initialize_llm()
         prompt = PromptTemplate.from_template(self.template)
 

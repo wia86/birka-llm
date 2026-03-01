@@ -2,7 +2,9 @@
 
 import os
 import time
+from pathlib import Path
 
+from dotenv import load_dotenv
 from rag_assistant import (
     AssistantProfile,
     RAGAssistant,
@@ -10,6 +12,8 @@ from rag_assistant import (
     get_active_profile,
     set_active_profile,
 )
+
+load_dotenv(Path(__file__).resolve().parent.parent / ".env")
 
 PROFILE_NAME = os.environ.get("RAG_PROFILE", "ollama_local")
 DEMO_QUESTION = os.environ.get("RAG_DEMO_QUESTION", "query: какие есть схемно-режимные мероприятия?")

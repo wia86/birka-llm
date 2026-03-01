@@ -13,6 +13,12 @@ def _get_persist_directory() -> Path:
     return Path(raw) if raw else Path("./data/chroma_default")
 
 
+def _get_embedding_model() -> str:
+    """Модель эмбеддингов из RAG_MODEL_NAME или дефолт."""
+    raw = os.environ.get("RAG_MODEL_NAME", "").strip()
+    return raw if raw else "d0rj/e5-large-en-ru"
+
+
 @dataclass(slots=True, frozen=True)
 class AssistantProfile:
     """Профиль конфигурации для запуска RAGAssistant.
@@ -60,12 +66,13 @@ class AssistantProfile:
 
 def _profiles() -> dict[str, AssistantProfile]:
     persist = _get_persist_directory()
+    embed_model = _get_embedding_model()
     return {
         "ollama_local": AssistantProfile(
             name="Локальная Ollama",
             description="Генерация через локальный сервер Ollama",
             persist_directory=persist,
-            model_name="BAAI/bge-m3",
+            model_name=embed_model,
             llm_model="qwen3-vl:8b",
             llm_provider="ollama",
             temperature=0.2,
@@ -75,7 +82,7 @@ def _profiles() -> dict[str, AssistantProfile]:
             name="OpenAI-совместимый API",
             description="Сетевая LLM; ключ берётся из OPENAI_API_KEY, если не указан явно",
             persist_directory=persist,
-            model_name="BAAI/bge-m3",
+            model_name=embed_model,
             llm_model="gpt-4o-mini",
             llm_provider="openai",
             temperature=0.2,
@@ -88,7 +95,7 @@ def _profiles() -> dict[str, AssistantProfile]:
                 "Требуется API-ключ из переменной GIGACHAT_API_KEY"
             ),
             persist_directory=persist,
-            model_name="BAAI/bge-m3",
+            model_name=embed_model,
             llm_model="GigaChat-2",
             llm_provider="openai",
             llm_api_base="https://gigachat.devices.sberbank.ru/api/v1/",

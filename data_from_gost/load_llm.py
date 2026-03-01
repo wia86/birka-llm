@@ -1,6 +1,12 @@
 """Модуль для инициализации моделей эмбеддингов для RAG."""
 
+from pathlib import Path
+
+from dotenv import load_dotenv
 from langchain_huggingface import HuggingFaceEmbeddings
+
+# Загрузка .env из корня проекта (для HF_HOME, RAG_* при запуске как скрипт)
+load_dotenv(Path(__file__).resolve().parent.parent / ".env")
 
 
 def get_embeddings(

@@ -11,6 +11,11 @@ import os
 import sys
 from pathlib import Path
 
+from dotenv import load_dotenv
+
+# Загрузка .env из корня проекта
+load_dotenv(Path(__file__).resolve().parent.parent / ".env")
+
 sys.path.insert(0, str(Path(__file__).parent))
 
 from rag_assistant import AssistantProfile, RAGAssistant
@@ -42,7 +47,7 @@ def test_connection() -> bool:
                 "RAG_PERSIST_DIR",
                 "./data/chroma_default",
             )),
-            model_name="BAAI/bge-m3",
+            model_name=os.environ.get("RAG_MODEL_NAME", "").strip() or "d0rj/e5-large-en-ru",
             llm_model="GigaChat",
             llm_provider="openai",
             llm_api_base="https://gigachat.devices.sberbank.ru/api/",
