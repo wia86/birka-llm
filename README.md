@@ -46,6 +46,15 @@ python run_lln.py
 - `machine_learning_model/` — данные для TKZ (xlsx).
 - `create_data_for_machine.py`, `create_model_machine.py`, `search_with_machine_learning.py` — **legacy**: скрипты для TKZ/оборудования, зависят от старых путей `dir_common`/`moduls` и в текущем виде в этом репозитории не запускаются; оставлены для истории.
 
+## Публикация на удалённый репозиторий
+
+После создания репозитория на GitHub/GitLab выполните:
+
+```bash
+git remote add origin <URL_репозитория>
+git push -u origin master
+```
+
 ## Лицензия
 
 Внутренний инструмент для электротехнических расчётов (проект Birka).
