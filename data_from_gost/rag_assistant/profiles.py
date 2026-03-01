@@ -1,4 +1,4 @@
-"""Профили конфигурации RAGAssistant (Ollama / OpenAI / GigaChat)."""
+"""Профили конфигурации RAGAssistant (Ollama / OpenAI / GigaChat / OpenRouter / Groq)."""
 
 import os
 from dataclasses import dataclass
@@ -92,13 +92,35 @@ def _profiles() -> dict[str, AssistantProfile]:
             name="GigaChat",
             description=(
                 "Российская LLM от Сбера через API (Scope: GIGACHAT_API_PERS). "
-                "Требуется API-ключ из переменной GIGACHAT_API_KEY"
+                "Ключ: GIGACHAT_API_KEY"
             ),
             persist_directory=persist,
             model_name=embed_model,
             llm_model="GigaChat-2",
             llm_provider="openai",
             llm_api_base="https://gigachat.devices.sberbank.ru/api/v1/",
+            temperature=0.2,
+            top_k=6,
+        ),
+        "openrouter": AssistantProfile(
+            name="OpenRouter",
+            description="Единый API к разным моделям (Claude, GPT и др.). Ключ: OPENROUTER_API_KEY",
+            persist_directory=persist,
+            model_name=embed_model,
+            llm_model="anthropic/claude-3.5-sonnet",
+            llm_provider="openai",
+            llm_api_base="https://openrouter.ai/api/v1",
+            temperature=0.2,
+            top_k=6,
+        ),
+        "groq": AssistantProfile(
+            name="Groq",
+            description="Быстрая инференс-платформа (Llama и др.). Ключ: GROQ_API_KEY",
+            persist_directory=persist,
+            model_name=embed_model,
+            llm_model="llama-3.1-70b-versatile",
+            llm_provider="openai",
+            llm_api_base="https://api.groq.com/openai/v1",
             temperature=0.2,
             top_k=6,
         ),

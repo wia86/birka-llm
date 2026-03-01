@@ -203,20 +203,28 @@ class RAGAssistant:
             client_kwargs["base_url"] = self.llm_api_base
         return ChatOllama(**client_kwargs)
 
+    def _resolve_openai_api_key(self) -> tuple[str, str]:
+        """Определяет API-ключ и имя переменной окружения по llm_api_base."""
+        if self.llm_api_key:
+            return self.llm_api_key, "llm_api_key"
+        base = (self.llm_api_base or "").lower()
+        if "gigachat" in base:
+            return os.getenv("GIGACHAT_API_KEY", ""), "GIGACHAT_API_KEY"
+        if "openrouter" in base:
+            return os.getenv("OPENROUTER_API_KEY", ""), "OPENROUTER_API_KEY"
+        if "groq" in base:
+            return os.getenv("GROQ_API_KEY", ""), "GROQ_API_KEY"
+        return os.getenv("OPENAI_API_KEY", ""), "OPENAI_API_KEY"
+
     def _create_openai_llm(self) -> BaseChatModel:
-        """Создание клиента для OpenAI-совместимого сетевого API (включая GigaChat)."""
+        """Создание клиента для OpenAI-совместимого сетевого API (GigaChat, OpenRouter, Groq, OpenAI)."""
         if ChatOpenAICls is None:
             raise ImportError(
                 "Модуль langchain-openai не установлен. "
                 "Установите 'langchain-openai' и 'openai', чтобы использовать сетевую LLM."
             )
 
-        if self.llm_api_base and "gigachat" in self.llm_api_base.lower():
-            api_key = self.llm_api_key or os.getenv("GIGACHAT_API_KEY")
-            env_var_name = "GIGACHAT_API_KEY"
-        else:
-            api_key = self.llm_api_key or os.getenv("OPENAI_API_KEY")
-            env_var_name = "OPENAI_API_KEY"
+        api_key, env_var_name = self._resolve_openai_api_key()
 
         if not api_key:
             raise ValueError(
@@ -260,9 +268,7 @@ class RAGAssistant:
             )
 
         base_url = self.llm_api_base or "https://api.openai.com/v1"
-        env_var_hint = (
-            "GIGACHAT_API_KEY" if "gigachat" in base_url.lower() else "OPENAI_API_KEY"
-        )
+        _, env_var_hint = self._resolve_openai_api_key()
 
         return (
             "Сетевая LLM недоступна.\n"
