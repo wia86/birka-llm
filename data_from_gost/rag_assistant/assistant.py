@@ -17,6 +17,7 @@ from langchain_core.runnables import Runnable, RunnableLambda, RunnablePassthrou
 from langchain_huggingface import HuggingFaceEmbeddings
 from langchain_ollama import ChatOllama
 
+from .apifreellm_llm import ChatApiFreeLLM
 from .giga_get_token import gigachat_get_bearer_token
 from .llm_types import LLMProvider
 
@@ -226,6 +227,8 @@ class RAGAssistant:
                 return self._create_ollama_llm()
             case "openai":
                 return self._create_openai_llm()
+            case "apifreellm":
+                return self._create_apifreellm_llm()
             case _ as unsupported:
                 raise ValueError(f"Неподдерживаемый провайдер LLM: {unsupported}")
 
@@ -315,6 +318,19 @@ class RAGAssistant:
 
         return ChatOpenAICls(**client_kwargs)
 
+    def _create_apifreellm_llm(self) -> BaseChatModel:
+        """Создание клиента ApiFreeLLM (свой формат API)."""
+        api_key = (self.llm_api_key or "").strip() or os.getenv("APIFREELLM_API_KEY", "").strip()
+        if not api_key:
+            raise ValueError(
+                "Не задан API-ключ для ApiFreeLLM. "
+                "Установите переменную окружения APIFREELLM_API_KEY."
+            )
+        return ChatApiFreeLLM(
+            api_key=api_key,
+            api_base=(self.llm_api_base or "https://apifreellm.com/api/v1").rstrip("/"),
+        )
+
     @staticmethod
     def _network_exceptions() -> tuple[type[Exception], ...]:
         """Кортеж сетевых исключений для переиспользования."""
@@ -337,6 +353,16 @@ class RAGAssistant:
                 "Проверьте, что:\n"
                 f"  1. Сервис Ollama запущен и доступен по адресу {url_hint}\n"
                 f"  2. Модель {self.llm_model} загружена (ollama pull {self.llm_model})\n"
+                f"Детали ошибки: {error}"
+            )
+        if self.llm_provider == "apifreellm":
+            base_url = self.llm_api_base or "https://apifreellm.com/api/v1"
+            return (
+                "ApiFreeLLM недоступен.\n"
+                "Проверьте:\n"
+                f"  1. base_url: {base_url}\n"
+                "  2. Переменная окружения APIFREELLM_API_KEY\n"
+                "  3. Лимит: 1 запрос в 25 сек (free tier)\n"
                 f"Детали ошибки: {error}"
             )
 
