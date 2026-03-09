@@ -15,10 +15,10 @@ def check_imports():
             available_profile_names,
             create_rag_index,
         )
-        print("✓ Все импорты успешны")
+        print("[OK] Все импорты успешны")
         return True
     except ImportError as e:
-        print(f"✗ Ошибка импорта: {e}")
+        print(f"[FAIL] Ошибка импорта: {e}")
         return False
 
 
@@ -29,13 +29,13 @@ def check_profiles():
         from birka_rag import available_profile_names, select_profile
         
         profiles = available_profile_names()
-        print(f"✓ Доступно профилей: {len(profiles)}")
+        print(f"[OK] Доступно профилей: {len(profiles)}")
         for name in profiles:
             profile = select_profile(name)
             print(f"  - {name}: {profile.name}")
         return True
     except Exception as e:
-        print(f"✗ Ошибка профилей: {e}")
+        print(f"[FAIL] Ошибка профилей: {e}")
         return False
 
 
@@ -56,16 +56,16 @@ def check_cli_commands():
                 timeout=5,
             )
             if result.returncode == 0 or "usage" in result.stdout.lower() or "usage" in result.stderr.lower():
-                print(f"✓ {cmd} доступна")
+                print(f"[OK] {cmd} доступна")
                 results.append(True)
             else:
-                print(f"✗ {cmd} вернула код {result.returncode}")
+                print(f"[FAIL] {cmd} вернула код {result.returncode}")
                 results.append(False)
         except FileNotFoundError:
-            print(f"✗ {cmd} не найдена (возможно, нужно переустановить пакет)")
+            print(f"[FAIL] {cmd} не найдена (возможно, нужно переустановить пакет)")
             results.append(False)
         except Exception as e:
-            print(f"✗ {cmd}: {e}")
+            print(f"[FAIL] {cmd}: {e}")
             results.append(False)
     
     return all(results)
@@ -88,10 +88,10 @@ def check_dependencies():
     for module, name in deps:
         try:
             __import__(module)
-            print(f"✓ {name}")
+            print(f"[OK] {name}")
             results.append(True)
         except ImportError:
-            print(f"✗ {name} не установлен")
+            print(f"[FAIL] {name} не установлен")
             results.append(False)
     
     return all(results)
@@ -103,14 +103,14 @@ def check_gpu():
     try:
         import torch
         if torch.cuda.is_available():
-            print(f"✓ GPU доступен: {torch.cuda.get_device_name(0)}")
+            print(f"[OK] GPU доступен: {torch.cuda.get_device_name(0)}")
             print(f"  CUDA версия: {torch.version.cuda}")
             return True
         else:
-            print("⚠ GPU не обнаружен, будет использоваться CPU")
+            print("[WARN] GPU не обнаружен, будет использоваться CPU")
             return True
     except Exception as e:
-        print(f"✗ Ошибка проверки GPU: {e}")
+                    print(f"[FAIL] Ошибка проверки GPU: {e}")
         return False
 
 
@@ -133,7 +133,7 @@ def main():
         try:
             results[name] = check_func()
         except Exception as e:
-            print(f"\n✗ Критическая ошибка в проверке '{name}': {e}")
+            print(f"\n[FAIL] Критическая ошибка в проверке '{name}': {e}")
             results[name] = False
     
     print("\n" + "=" * 60)
@@ -141,20 +141,20 @@ def main():
     print("=" * 60)
     
     for name, result in results.items():
-        status = "✓ OK" if result else "✗ FAIL"
+        status = "[OK]" if result else "[FAIL]"
         print(f"{name:20} {status}")
     
     all_passed = all(results.values())
     
     print("\n" + "=" * 60)
     if all_passed:
-        print("✓ Все проверки пройдены успешно!")
+        print("[OK] Все проверки пройдены успешно!")
         print("\nСледующие шаги:")
         print("1. Настройте .env файл (скопируйте .env.example)")
         print("2. Создайте индекс: birka-rag-index")
         print("3. Запустите чат: birka-rag")
     else:
-        print("✗ Некоторые проверки не пройдены")
+        print("[FAIL] Некоторые проверки не пройдены")
         print("\nРекомендации:")
         print("1. Переустановите пакет: pip install -e .")
         print("2. Установите зависимости: pip install -e '.[openai]'")
