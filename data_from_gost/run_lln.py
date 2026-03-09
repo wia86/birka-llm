@@ -59,13 +59,18 @@ def main() -> None:
 
     print(f"Используется профиль: {PROFILE_NAME} — {profile.name}\n")
 
-    start = time.time()
-    answer = assistant.ask(DEMO_QUESTION)
-    query_time = time.time() - start
+    try:
+        start = time.time()
+        answer = assistant.ask(DEMO_QUESTION)
+        query_time = time.time() - start
 
-    print(f"Вопрос: {DEMO_QUESTION}")
-    print(f"Ответ: {answer}\n")
-    print(f"Время ответа: {query_time:.2f}с\n")
+        print(f"Вопрос: {DEMO_QUESTION}")
+        print(f"Ответ: {answer}\n")
+        print(f"Время ответа: {query_time:.2f}с\n")
+    except Exception as e:
+        print("Не удалось выполнить демонстрационный запрос.\n")
+        print(f"Ошибка: {e}\n")
+        print("Переходим сразу к интерактивному режиму.\n")
 
     assistant.chat()
 

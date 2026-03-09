@@ -135,6 +135,17 @@ def _profiles() -> dict[str, AssistantProfile]:
             temperature=0.2,
             top_k=6,
         ),
+        "apifreellm": AssistantProfile(
+            name="ApiFreeLLM",
+            description="Бесплатный API (apifreellm.com). Ключ: APIFREELLM_API_KEY",
+            persist_directory=persist,
+            model_name=embed_model,
+            llm_model="apifreellm",
+            llm_provider="apifreellm",
+            llm_api_base="https://apifreellm.com/api/v1",
+            temperature=0.2,
+            top_k=6,
+        ),
     }
 
 
