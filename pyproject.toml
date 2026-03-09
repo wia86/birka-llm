@@ -7,7 +7,7 @@ name = "birka-rag"
 version = "0.1.0"
 description = "RAG-система для работы с нормативными документами (эмбеддинги, Chroma, LLM)"
 readme = "README.md"
-requires-python = ">=3.11,<3.14"
+requires-python = ">=3.11,<3.15"
 license = {text = "Proprietary"}
 authors = [
     {name = "Birka Team"}
