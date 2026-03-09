@@ -19,6 +19,8 @@ __pycache__/
 .vscode/
 *.swp
 *.swo
+.cursor/
+.continue/
 
 # Каталог векторных баз RAG (RAG_PERSIST_DIR по умолчанию ./data/chroma_default)
 data/
@@ -32,3 +34,11 @@ build/
 dist/
 *.egg-info/
 *.egg
+
+# Coverage
+.coverage
+htmlcov/
+
+# Jupyter
+.ipynb_checkpoints/
+*.ipynb

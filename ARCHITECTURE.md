@@ -1,61 +1,76 @@
-# Архитектура birka-llm
+# Архитектура birka-rag
 
 RAG-система и чат с LLM по нормативным документам (эмбеддинги, Chroma, GigaChat/Ollama/OpenAI).
 Вынесена из основного репозитория Birka.
 
-## Структура
+## Новая структура (пакет)
 
 ```
-birka-llm/
-├── data_from_gost/              # RAG-система
-│   ├── rag_assistant/           # Пакет RAG-помощника
-│   │   ├── __init__.py          # Публичный API
+birka-rag/
+├── src/birka_rag/               # Основной пакет
+│   ├── __init__.py              # Публичный API
+│   ├── core/                    # Ядро RAG
+│   │   ├── __init__.py
 │   │   ├── assistant.py         # RAGAssistant — ядро (Chroma + LLM)
-│   │   ├── profiles.py          # Профили конфигурации (Ollama / OpenAI / GigaChat)
-│   │   ├── llm_types.py         # Тип LLMProvider
-│   │   └── giga_get_token.py    # Утилита токена GigaChat
-│   ├── create_rag.py            # Создание векторной базы (PDF → Chroma)
-│   ├── run_lln.py               # Точка входа: чат с RAG
-│   ├── load_llm.py              # Фабрика эмбеддингов (bge-m3, e5-large)
-│   ├── giga_api.py              # OAuth-аутентификация GigaChat
-│   └── test_gigachat_connection.py  # Проверка подключения GigaChat
-├── create_model_machine.py      # [legacy] Обучение SentenceTransformer
-├── create_data_for_machine.py   # [legacy] Подготовка данных для ML
-├── search_with_machine_learning.py  # [legacy] Поиск совпадений энергообъектов
-├── requirements.txt
+│   │   ├── profiles.py          # Профили конфигурации
+│   │   ├── types.py             # LLMProvider и другие типы
+│   │   └── providers/           # Провайдеры LLM
+│   │       ├── __init__.py
+│   │       ├── gigachat.py      # GigaChat OAuth
+│   │       └── apifreellm.py    # ApiFreeLLM клиент
+│   ├── indexing/                # Создание индекса
+│   │   ├── __init__.py
+│   │   └── indexer.py           # create_rag_index()
+│   ├── cli/                     # CLI утилиты
+│   │   ├── __init__.py
+│   │   ├── chat.py              # birka-rag (чат)
+│   │   └── index.py             # birka-rag-index (индексация)
+│   └── py.typed                 # PEP 561 marker
+├── examples/                    # Примеры использования
+│   ├── basic_usage.py
+│   ├── using_profiles.py
+│   ├── create_index.py
+│   └── gigachat_example.py
+├── docs/                        # Документация
+│   ├── README.md
+│   └── INSTALLATION.md
+├── tests/                       # Тесты
+│   └── test_basic.py
+├── pyproject.toml               # Конфигурация пакета
+├── README.md
+├── ARCHITECTURE.md
+├── MIGRATION.md
 └── .env.example
 ```
 
 ## Модули
 
-### data_from_gost/rag_assistant/ — ядро RAG
+### src/birka_rag/core/ — ядро RAG
 
 | Модуль | Назначение |
 |---|---|
 | `assistant.py` | `RAGAssistant` — загрузка Chroma, embeddings, LLM, цепочка RAG, методы `ask()` / `chat()` |
 | `profiles.py` | `AssistantProfile` (dataclass) — конфигурация провайдеров; `select_profile()`, `set_active_profile()` |
-| `llm_types.py` | `LLMProvider = Literal["ollama", "openai"]` |
-| `giga_get_token.py` | Утилита для получения токена GigaChat |
+| `types.py` | `LLMProvider = Literal["ollama", "openai", "apifreellm"]` |
+| `providers/gigachat.py` | Утилита для получения токена GigaChat (OAuth) |
+| `providers/apifreellm.py` | Клиент для ApiFreeLLM API |
 
-### data_from_gost/ — скрипты
+### src/birka_rag/indexing/ — индексация
 
 | Модуль | Назначение |
 |---|---|
-| `create_rag.py` | Загрузка PDF, разбивка на чанки, создание Chroma-базы |
-| `run_lln.py` | Точка входа: выбор профиля, демо-вопрос, интерактивный чат |
-| `load_llm.py` | Фабрика `HuggingFaceEmbeddings` (bge-m3, multilingual-e5-large) |
-| `giga_api.py` | OAuth-авторизация через Sber API для GigaChat |
-| `test_gigachat_connection.py` | Проверка переменных окружения и тестовый запрос к GigaChat |
+| `indexer.py` | `create_rag_index()` — загрузка PDF, разбивка на чанки, создание Chroma-базы |
+
+### src/birka_rag/cli/ — CLI
+
+| Модуль | Назначение |
+|---|---|
+| `chat.py` | `birka-rag` — интерактивный чат с RAG |
+| `index.py` | `birka-rag-index` — создание индекса из PDF |
 
 ### Legacy (корень)
 
-Зависят от `moduls` и `dir_common` из основного репозитория Birka — **не запускаются** в этом проекте.
-
-| Модуль | Назначение |
-|---|---|
-| `create_model_machine.py` | Обучение SentenceTransformer на Excel-парах |
-| `create_data_for_machine.py` | Подготовка данных: сравнение строк, обработка xlsx |
-| `search_with_machine_learning.py` | Поиск совпадений энергообъектов по эмбеддингам |
+Скрипты `create_model_machine.py`, `create_data_for_machine.py`, `search_with_machine_learning.py` зависят от `moduls` и `dir_common` из основного репозитория Birka — **не запускаются** в этом проекте.
 
 ## Зависимости
 
@@ -68,14 +83,117 @@ birka-llm/
 
 ## Потоки данных
 
+### Индексация
+
 ```
 PDF файлы
-    ↓  create_rag.py
+    ↓  birka-rag-index (create_rag_index)
+PyPDFLoader → Documents
+    ↓  RecursiveCharacterTextSplitter
+Чанки (chunks)
+    ↓  HuggingFaceEmbeddings
+Векторы (embeddings)
+    ↓  Chroma.from_documents
 Chroma DB (persist_directory)
-    ↓  RAGAssistant.ask(question)
-Retriever → top_k чанков → PromptTemplate → LLM → StrOutputParser → ответ
 ```
 
-LLM-провайдеры:
+### Запрос
+
+```
+Вопрос пользователя
+    ↓  RAGAssistant.ask(question)
+Retriever (Chroma) → top_k чанков
+    ↓  PromptTemplate
+Промпт с контекстом
+    ↓  LLM (Ollama/OpenAI/GigaChat/ApiFreeLLM)
+Ответ
+    ↓  StrOutputParser
+Текст ответа
+```
+
+## LLM-провайдеры
+
 - **Ollama** (локальный) — `ChatOllama`
-- **OpenAI / GigaChat** (сетевой) — `ChatOpenAI` (OpenAI-совместимый API)
+- **OpenAI / GigaChat / OpenRouter / Groq / DeepSeek** (сетевой) — `ChatOpenAI` (OpenAI-совместимый API)
+- **ApiFreeLLM** (сетевой) — `ChatApiFreeLLM` (собственный формат API)
+
+## Публичный API
+
+### Основные классы
+
+```python
+from birka_rag import RAGAssistant, AssistantProfile
+
+# Создание ассистента
+assistant = RAGAssistant(
+    persist_directory="./data/chroma",
+    model_name="d0rj/e5-large-en-ru",
+    llm_model="llama3.2:3b",
+    llm_provider="ollama",
+)
+
+# Запрос
+answer = assistant.ask("Вопрос")
+
+# Интерактивный режим
+assistant.chat()
+```
+
+### Профили
+
+```python
+from birka_rag import select_profile, available_profile_names
+
+# Список профилей
+print(available_profile_names())
+
+# Выбор профиля
+profile = select_profile("gigachat")
+assistant = RAGAssistant(**profile.to_kwargs())
+```
+
+### Индексация
+
+```python
+from birka_rag import create_rag_index
+
+create_rag_index(
+    persist_directory="./data/chroma",
+    source_paths=["./docs"],
+    model_name="d0rj/e5-large-en-ru",
+)
+```
+
+## CLI команды
+
+```bash
+# Создание индекса
+birka-rag-index
+
+# Чат с ассистентом
+birka-rag
+```
+
+## Миграция
+
+### Импорты
+
+```python
+# Было
+from rag_assistant import RAGAssistant
+
+# Стало
+from birka_rag import RAGAssistant
+```
+
+### CLI
+
+```bash
+# Было
+python data_from_gost/create_rag.py
+python data_from_gost/run_lln.py
+
+# Стало
+birka-rag-index
+birka-rag
+```
