@@ -110,7 +110,7 @@ def check_gpu():
             print("[WARN] GPU не обнаружен, будет использоваться CPU")
             return True
     except Exception as e:
-                    print(f"[FAIL] Ошибка проверки GPU: {e}")
+        print(f"[FAIL] Ошибка проверки GPU: {e}")
         return False
 
 
@@ -158,7 +158,7 @@ def main():
         print("\nРекомендации:")
         print("1. Переустановите пакет: pip install -e .")
         print("2. Установите зависимости: pip install -e '.[openai]'")
-        print("3. Проверьте Python версию (требуется 3.11-3.13)")
+        print("3. Проверьте Python версию (требуется 3.11-3.14)")
     print("=" * 60)
     
     return 0 if all_passed else 1
