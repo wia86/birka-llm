@@ -452,7 +452,7 @@ class RAGAssistant:
 
                 print(f"\nОтвет: {self.ask(question)}\n")
 
-            except KeyboardInterrupt:
+            except (KeyboardInterrupt, EOFError):
                 print("\n\nДо свидания!")
                 break
             except self._network_exceptions() as e:
