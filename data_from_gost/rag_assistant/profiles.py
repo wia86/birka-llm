@@ -10,7 +10,7 @@ from .llm_types import LLMProvider
 def _get_persist_directory() -> Path:
     """Путь к векторной базе из RAG_PERSIST_DIR или дефолт."""
     raw = os.environ.get("RAG_PERSIST_DIR", "").strip()
-    return Path(raw) if raw else Path("./data/chroma_default")
+    return Path(raw) if raw else Path("./storage/chroma/default")
 
 
 def _get_embedding_model() -> str:

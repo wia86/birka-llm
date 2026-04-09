@@ -14,7 +14,7 @@ birka-llm/
 │   │   ├── profiles.py          # Профили конфигурации (Ollama / OpenAI / GigaChat)
 │   │   ├── llm_types.py         # Тип LLMProvider
 │   │   └── giga_get_token.py    # Утилита токена GigaChat
-│   ├── create_rag.py            # Создание векторной базы (PDF → Chroma)
+│   ├── create_rag.py            # Создание векторной базы (PDF/MD/TXT/JSON → Chroma)
 │   ├── run_lln.py               # Точка входа: чат с RAG
 │   ├── load_llm.py              # Фабрика эмбеддингов (bge-m3, e5-large)
 │   ├── giga_api.py              # OAuth-аутентификация GigaChat
@@ -22,6 +22,8 @@ birka-llm/
 ├── create_model_machine.py      # [legacy] Обучение SentenceTransformer
 ├── create_data_for_machine.py   # [legacy] Подготовка данных для ML
 ├── search_with_machine_learning.py  # [legacy] Поиск совпадений энергообъектов
+├── knowledge/                   # База знаний для RAG (docs/code_guides/task_samples)
+├── storage/                     # Runtime-данные (chroma/uploads)
 ├── requirements.txt
 └── .env.example
 ```
@@ -32,7 +34,7 @@ birka-llm/
 
 | Модуль | Назначение |
 |---|---|
-| `assistant.py` | `RAGAssistant` — загрузка Chroma, embeddings, LLM, цепочка RAG, методы `ask()` / `chat()` |
+| `assistant.py` | `RAGAssistant` — загрузка Chroma, embeddings, LLM, цепочка RAG, методы `ask()` / `chat()` + triage `traceback` и `taskfile` |
 | `profiles.py` | `AssistantProfile` (dataclass) — конфигурация провайдеров; `select_profile()`, `set_active_profile()` |
 | `llm_types.py` | `LLMProvider = Literal["ollama", "openai"]` |
 | `giga_get_token.py` | Утилита для получения токена GigaChat |
@@ -41,8 +43,8 @@ birka-llm/
 
 | Модуль | Назначение |
 |---|---|
-| `create_rag.py` | Загрузка PDF, разбивка на чанки, создание Chroma-базы |
-| `run_lln.py` | Точка входа: выбор профиля, демо-вопрос, интерактивный чат |
+| `create_rag.py` | Загрузка PDF/MD/TXT/JSON/LOG/YAML/CSV, разбивка на чанки, создание Chroma-базы |
+| `run_lln.py` | Точка входа: выбор профиля, демо-вопрос, интерактивный чат + команды `:traceback`, `:taskfile` |
 | `load_llm.py` | Фабрика `HuggingFaceEmbeddings` (bge-m3, multilingual-e5-large) |
 | `giga_api.py` | OAuth-авторизация через Sber API для GigaChat |
 | `test_gigachat_connection.py` | Проверка переменных окружения и тестовый запрос к GigaChat |
@@ -62,16 +64,16 @@ birka-llm/
 Основные:
 - `langchain` + `langchain-chroma`, `langchain-huggingface`, `langchain-ollama`, `langchain-openai`
 - `chromadb`, `sentence-transformers`, `torch`
-- `pypdf` (загрузка PDF)
+- `pypdf` (загрузка PDF), `TextLoader` из `langchain-community` (text/markdown/json/log)
 
 Конфигурация — через переменные окружения (см. `.env.example`).
 
 ## Потоки данных
 
 ```
-PDF файлы
+knowledge/docs + knowledge/code_guides + knowledge/task_samples
     ↓  create_rag.py
-Chroma DB (persist_directory)
+Chroma DB (storage/chroma/*)
     ↓  RAGAssistant.ask(question)
 Retriever → top_k чанков → PromptTemplate → LLM → StrOutputParser → ответ
 ```

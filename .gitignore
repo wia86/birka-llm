@@ -20,8 +20,12 @@ __pycache__/
 *.swp
 *.swo
 
-# Каталог векторных баз RAG (RAG_PERSIST_DIR по умолчанию ./data/chroma_default)
+# Каталоги runtime-данных RAG (RAG_PERSIST_DIR по умолчанию ./storage/chroma/default)
 data/
+storage/chroma/**
+storage/uploads/**
+!storage/chroma/.gitkeep
+!storage/uploads/.gitkeep
 
 # OS
 Thumbs.db

@@ -27,7 +27,7 @@ load_dotenv(Path(__file__).resolve().parent.parent / ".env", override=True)
 PROFILE_NAME = (
     os.environ.get("RAG_PROFILE") or os.environ.get("RAG_CLOUD_MODEL") or "ollama_local"
 )
-DEMO_QUESTION = os.environ.get("RAG_DEMO_QUESTION", "query: какие есть схемно-режимные мероприятия?")
+DEMO_QUESTION = os.environ.get("RAG_DEMO_QUESTION", "какие есть схемно-режимные мероприятия?")
 
 
 def list_profiles() -> None:
@@ -57,7 +57,8 @@ def main() -> None:
             return
         raise
 
-    print(f"Используется профиль: {PROFILE_NAME} — {profile.name}\n")
+    print(f"Используется профиль: {PROFILE_NAME} — {profile.name}")
+    print("В интерактивном режиме доступны :traceback и :taskfile для диагностики.\n")
 
     try:
         start = time.time()

@@ -1,7 +1,9 @@
 """RAG-помощник: Chroma + Embeddings + LLM (Ollama / OpenAI / GigaChat)."""
 
+import hashlib
 import json
 import os
+import re
 from importlib import import_module
 from pathlib import Path
 from typing import cast
@@ -22,6 +24,8 @@ from .giga_get_token import gigachat_get_bearer_token
 from .llm_types import LLMProvider
 
 DEFAULT_OLLAMA_URL = "http://127.0.0.1:11434"
+MAX_TASKFILE_BYTES = 200_000
+MAX_TRACEBACK_LINES = 120
 
 
 RAG_META_FILENAME = ".rag_embedding_meta.json"
@@ -30,6 +34,19 @@ RAG_META_FILENAME = ".rag_embedding_meta.json"
 def _is_e5_model(model_name: str) -> bool:
     """Проверка, что модель E5 (требует префикса query: для запроса)."""
     return "e5" in (model_name or "").lower()
+
+
+def _redact_sensitive_text(value: str) -> str:
+    """Минимальная маскировка потенциально чувствительных токенов в пользовательском вводе."""
+    patterns = [
+        (r"(?i)(api[_-]?key\s*[:=]\s*)([^\s,;]+)", r"\1***"),
+        (r"(?i)(token\s*[:=]\s*)([^\s,;]+)", r"\1***"),
+        (r"(?i)(authorization\s*:\s*bearer\s+)([^\s,;]+)", r"\1***"),
+    ]
+    redacted = value
+    for pattern, replacement in patterns:
+        redacted = re.sub(pattern, replacement, redacted)
+    return redacted
 
 
 CHROMA_DB_NAME = "chroma.sqlite3"
@@ -436,10 +453,148 @@ class RAGAssistant:
         except self._network_exceptions() as e:
             raise ConnectionError(self._provider_connection_hint(e)) from e
 
+    @staticmethod
+    def _read_multiline_until_end(prompt: str) -> str:
+        """Считывает многострочный ввод до строки END."""
+        print(prompt)
+        lines: list[str] = []
+        while True:
+            line = input()
+            if line.strip().upper() == "END":
+                break
+            lines.append(line)
+        return "\n".join(lines).strip()
+
+    @staticmethod
+    def _parse_taskfile_command(command: str) -> tuple[Path, str | None]:
+        """Парсит :taskfile <path> [| вопрос]."""
+        payload = command[len(":taskfile") :].strip()
+        if not payload:
+            raise ValueError("Использование: :taskfile <путь_к_файлу> [| уточняющий вопрос]")
+        if "|" in payload:
+            path_raw, user_question = payload.split("|", maxsplit=1)
+            return Path(path_raw.strip()), user_question.strip() or None
+        return Path(payload), None
+
+    @staticmethod
+    def _prepare_traceback_text(traceback_text: str) -> str:
+        """Нормализует и сокращает traceback для безопасной передачи в LLM."""
+        cleaned = _redact_sensitive_text(traceback_text.strip())
+        lines = cleaned.splitlines()
+        if len(lines) > MAX_TRACEBACK_LINES:
+            lines = lines[-MAX_TRACEBACK_LINES:]
+        return "\n".join(lines)
+
+    def ask_traceback(self, traceback_text: str, user_question: str | None = None) -> str:
+        """Специализированный запрос: разбор traceback с безопасными рекомендациями."""
+        normalized = self._prepare_traceback_text(traceback_text)
+        if not normalized:
+            raise ValueError("Передан пустой traceback.")
+        question = user_question or "Разбери ошибку и предложи безопасные шаги исправления."
+        prompt = (
+            "Ниже traceback от пользователя программы 'Бирка'. "
+            "Проанализируй ошибку и ответь как инженер техподдержки.\n\n"
+            "Формат ответа:\n"
+            "1) Что означает ошибка простыми словами\n"
+            "2) На каком шаге пользовательского сценария она возникает\n"
+            "3) Что проверить в данных задания и настройках\n"
+            "4) Пошаговое исправление в интерфейсе программы\n"
+            "5) Когда эскалировать разработчику\n\n"
+            "Не раскрывай внутренние детали реализации, если они не нужны пользователю.\n\n"
+            f"Traceback:\n{normalized}\n\n"
+            f"Уточнение пользователя: {question}"
+        )
+        return self.ask(prompt)
+
+    @staticmethod
+    def _summarize_text_blob(content: str) -> str:
+        """Формирует краткую сводку по текстовому файлу задания."""
+        lines = content.splitlines()
+        preview = "\n".join(lines[:40])
+        keys_hint: list[str] = []
+        try:
+            data = json.loads(content)
+            if isinstance(data, dict):
+                keys_hint = sorted(str(k) for k in list(data.keys())[:25])
+        except json.JSONDecodeError:
+            pass
+        parts = [
+            f"- строк: {len(lines)}",
+            f"- символов: {len(content)}",
+        ]
+        if keys_hint:
+            parts.append(f"- top-level ключи JSON: {', '.join(keys_hint)}")
+        parts.append("- превью (первые строки):")
+        parts.append(preview if preview else "(пусто)")
+        return "\n".join(parts)
+
+    def _build_task_file_context(self, task_file_path: Path) -> str:
+        """Считывает файл задания и формирует контекст для LLM."""
+        resolved = task_file_path.expanduser().resolve()
+        if not resolved.exists() or not resolved.is_file():
+            raise FileNotFoundError(f"Файл задания не найден: {resolved}")
+
+        raw = resolved.read_bytes()
+        sha = hashlib.sha256(raw).hexdigest()
+        raw_limited = raw[:MAX_TASKFILE_BYTES]
+        text_content = ""
+        encoding_used = ""
+        for enc in ("utf-8", "cp1251", "utf-16"):
+            try:
+                text_content = raw_limited.decode(enc)
+                encoding_used = enc
+                break
+            except UnicodeDecodeError:
+                continue
+
+        file_header = [
+            f"- путь: {resolved}",
+            f"- размер (байт): {len(raw)}",
+            f"- sha256: {sha}",
+            f"- расширение: {resolved.suffix.lower() or '(без расширения)'}",
+        ]
+
+        if text_content:
+            if len(raw) > MAX_TASKFILE_BYTES:
+                file_header.append(
+                    f"- предупреждение: файл усечен до {MAX_TASKFILE_BYTES} байт для анализа"
+                )
+            file_header.append(f"- кодировка: {encoding_used}")
+            summary = self._summarize_text_blob(_redact_sensitive_text(text_content))
+        else:
+            preview_hex = raw_limited[:128].hex(" ")
+            summary = (
+                "- тип: бинарный или неизвестная кодировка\n"
+                "- превью (hex первых 128 байт):\n"
+                f"{preview_hex}"
+            )
+        return "\n".join(file_header) + "\n\n" + summary
+
+    def ask_task_file(self, task_file_path: Path, user_question: str | None = None) -> str:
+        """Специализированный запрос: диагностика по загруженному файлу задания."""
+        context = self._build_task_file_context(task_file_path)
+        question = user_question or "Проверь корректность файла задания и дай шаги исправления."
+        prompt = (
+            "Ниже данные файла задания на расчет из программы 'Бирка'. "
+            "Ответь как инженер техподдержки по шаблону:\n"
+            "1) Что распознано из файла\n"
+            "2) Какие несоответствия/риски есть\n"
+            "3) Что исправить в файле/настройках\n"
+            "4) Пошаговые действия в интерфейсе\n"
+            "5) Когда запросить traceback или лог дополнительно\n\n"
+            f"Данные файла:\n{context}\n\n"
+            f"Уточнение пользователя: {question}"
+        )
+        return self.ask(prompt)
+
     def chat(self) -> None:
         """Интерактивный режим общения."""
         print("RAG Помощник готов к работе!")
-        print("Введите 'выход' или 'quit' для завершения.\n")
+        print("Введите 'выход' или 'quit' для завершения.")
+        print("Команды:")
+        print("  :help                    — показать справку")
+        print("  :traceback               — вставить traceback (многострочно, закончить END)")
+        print("  :taskfile <path> [| q]   — анализ файла задания + необязательный вопрос\n")
 
         while True:
             try:
@@ -450,6 +605,35 @@ class RAGAssistant:
                     break
 
                 if not question:
+                    continue
+
+                if question.lower() in (":help", "help", "/help"):
+                    print(
+                        "\nКоманды:\n"
+                        "  :traceback\n"
+                        "    Вставьте traceback, завершите строкой END.\n"
+                        "  :taskfile <path> [| уточняющий вопрос]\n"
+                        "    Пример: :taskfile D:\\tasks\\case1.json | почему не запускается расчет?\n"
+                    )
+                    continue
+
+                if question.lower() == ":traceback":
+                    tb = self._read_multiline_until_end(
+                        "Вставьте traceback и завершите ввод строкой END:"
+                    )
+                    answer = self.ask_traceback(tb)
+                    print(f"\nОтвет: {answer}\n")
+                    continue
+
+                if question.lower().startswith(":taskfile"):
+                    file_path, user_q = self._parse_taskfile_command(question)
+                    answer = self.ask_task_file(file_path, user_q)
+                    print(f"\nОтвет: {answer}\n")
+                    continue
+
+                if "traceback (most recent call last)" in question.lower():
+                    answer = self.ask_traceback(question)
+                    print(f"\nОтвет: {answer}\n")
                     continue
 
                 print(f"\nОтвет: {self.ask(question)}\n")

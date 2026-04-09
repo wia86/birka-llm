@@ -1,4 +1,4 @@
-"""Создание RAG векторной базы (PDF → Chroma) с эмбеддингами."""
+"""Создание RAG векторной базы (PDF/Markdown/Text/JSON → Chroma) с эмбеддингами."""
 
 import sys
 if hasattr(sys.stdout, "reconfigure"):
@@ -18,7 +18,7 @@ from pathlib import Path
 
 from dotenv import load_dotenv
 from langchain_chroma import Chroma
-from langchain_community.document_loaders import PyPDFLoader
+from langchain_community.document_loaders import PyPDFLoader, TextLoader
 from langchain_huggingface import HuggingFaceEmbeddings
 from langchain_text_splitters import RecursiveCharacterTextSplitter
 
@@ -56,8 +56,26 @@ def _parse_bool(value: str, default: bool = True) -> bool:
     return default
 
 
-def _collect_pdf_paths(source_paths: list[str], recursive: bool) -> list[Path]:
-    """Собирает пути ко всем PDF: из папок (с вложенными или только корень) и одиночных файлов."""
+def _parse_extensions(raw: str) -> set[str]:
+    """Парсинг списка расширений из env-переменной RAG_SOURCE_EXTENSIONS."""
+    default = {".pdf", ".md", ".txt", ".log", ".json", ".yaml", ".yml", ".csv"}
+    if not raw or not raw.strip():
+        return default
+    parsed: set[str] = set()
+    for item in raw.split(","):
+        ext = item.strip().lower()
+        if not ext:
+            continue
+        parsed.add(ext if ext.startswith(".") else f".{ext}")
+    return parsed or default
+
+
+def _collect_source_paths(
+    source_paths: list[str],
+    recursive: bool,
+    extensions: set[str],
+) -> list[Path]:
+    """Собирает пути ко всем поддерживаемым файлам из папок и/или одиночных файлов."""
     collected: list[Path] = []
     seen: set[Path] = set()
     for raw in source_paths:
@@ -65,19 +83,19 @@ def _collect_pdf_paths(source_paths: list[str], recursive: bool) -> list[Path]:
         if not p.exists():
             continue
         if p.is_file():
-            if p.suffix.lower() == ".pdf":
+            if p.suffix.lower() in extensions:
                 if p not in seen:
                     seen.add(p)
                     collected.append(p)
             continue
         if recursive:
-            for f in p.rglob("*.pdf"):
-                if f.is_file() and f not in seen:
+            for f in p.rglob("*"):
+                if f.is_file() and f.suffix.lower() in extensions and f not in seen:
                     seen.add(f)
                     collected.append(f)
         else:
-            for f in p.glob("*.pdf"):
-                if f.is_file() and f not in seen:
+            for f in p.glob("*"):
+                if f.is_file() and f.suffix.lower() in extensions and f not in seen:
                     seen.add(f)
                     collected.append(f)
     return sorted(collected)
@@ -94,14 +112,26 @@ def _safe_dir_name(file_path: Path) -> str:
     return f"{s}_{h}" if s else h
 
 
-def _load_docs_from_pdf_paths(pdf_paths: list[Path]) -> list:
-    """Загружает страницы из списка PDF. Возвращает list of Document."""
+def _load_docs_from_paths(file_paths: list[Path]) -> list:
+    """Загружает документы из списка файлов. Возвращает list of Document."""
     from langchain_core.documents import Document
 
     all_docs: list[Document] = []
-    for path in pdf_paths:
-        loader = PyPDFLoader(str(path))
-        docs = loader.load()
+    for path in file_paths:
+        try:
+            suffix = path.suffix.lower()
+            if suffix == ".pdf":
+                loader = PyPDFLoader(str(path))
+                docs = loader.load()
+            else:
+                # autodetect_encoding важен для смешанных cp1251/utf-8 файлов.
+                loader = TextLoader(str(path), encoding="utf-8", autodetect_encoding=True)
+                docs = loader.load()
+                for doc in docs:
+                    doc.metadata["source_type"] = suffix
+        except Exception as e:
+            print(f"Пропуск файла {path}: {e}")
+            continue
         all_docs.extend(docs)
     return all_docs
 
@@ -124,7 +154,7 @@ def _apply_passage_prefix(chunks: list, model_name: str) -> list:
 
 
 def _run_common(
-    pdf_paths: list[Path],
+    file_paths: list[Path],
     persist_directory: str,
     embeddings: HuggingFaceEmbeddings,
     text_splitter: RecursiveCharacterTextSplitter,
@@ -133,10 +163,10 @@ def _run_common(
     device: str,
     start_time: float,
 ) -> None:
-    """Одна общая Chroma на все PDF."""
-    print("\nЗагрузка PDF документов...")
+    """Одна общая Chroma на все файлы."""
+    print("\nЗагрузка исходных документов...")
     load_start = time.time()
-    all_docs = _load_docs_from_pdf_paths(pdf_paths)
+    all_docs = _load_docs_from_paths(file_paths)
     load_time = time.time() - load_start
     print(f"Загружено страниц: {len(all_docs)} за {load_time:.1f}с\n")
 
@@ -166,7 +196,7 @@ def _run_common(
     _write_rag_meta(
         persist_directory,
         model_name,
-        source_files=[str(p) for p in pdf_paths],
+        source_files=[str(p) for p in file_paths],
     )
     total_time = time.time() - start_time
     _print_stats(
@@ -181,7 +211,7 @@ def _run_common(
 
 
 def _run_per_file(
-    pdf_paths: list[Path],
+    file_paths: list[Path],
     persist_directory: str,
     embeddings: HuggingFaceEmbeddings,
     text_splitter: RecursiveCharacterTextSplitter,
@@ -190,14 +220,14 @@ def _run_per_file(
     device: str,
     start_time: float,
 ) -> None:
-    """Отдельная Chroma на каждый PDF."""
+    """Отдельная Chroma на каждый файл."""
     base = Path(persist_directory)
     base.mkdir(parents=True, exist_ok=True)
     total_docs = 0
     total_chunks = 0
-    for i, path in enumerate(pdf_paths):
-        print(f"\n[{i + 1}/{len(pdf_paths)}] {path.name}")
-        docs = _load_docs_from_pdf_paths([path])
+    for i, path in enumerate(file_paths):
+        print(f"\n[{i + 1}/{len(file_paths)}] {path.name}")
+        docs = _load_docs_from_paths([path])
         if not docs:
             print("  Пропуск (пустой или ошибка)")
             continue
@@ -224,12 +254,12 @@ def _run_per_file(
         total_chunks += len(chunks)
         print(f"  Страниц: {len(docs)}, чанков: {len(chunks)} -> {subdir}")
     # Метаданные в корне каталога — модель и список всех исходных PDF
-    _write_rag_meta(base, model_name, source_files=[str(p) for p in pdf_paths])
+    _write_rag_meta(base, model_name, source_files=[str(p) for p in file_paths])
     total_time = time.time() - start_time
     print("\n" + "=" * 60)
     print("СТАТИСТИКА (per_file)")
     print("=" * 60)
-    print(f"Обработано файлов: {len(pdf_paths)}")
+    print(f"Обработано файлов: {len(file_paths)}")
     print(f"Всего страниц:     {total_docs}")
     print(f"Всего чанков:      {total_chunks}")
     print(f"Модель:            {model_name}, устройство: {device}")
@@ -273,31 +303,33 @@ def create_rag(
 
     Args:
         persist_directory: Путь для сохранения базы (или корень для per_file).
-        source_paths: Список путей к папкам с PDF и/или к отдельным PDF-файлам.
+        source_paths: Список путей к папкам с документами и/или к отдельным файлам.
         model_name: Название модели embeddings.
         chunk_size: Размер чанка текста.
         chunk_overlap: Перекрытие между чанками.
         batch_size: Размер батча для вставки в БД.
         use_gpu: Использовать GPU для ускорения.
-        recursive: Искать PDF во вложенных папках (True) или только в корне каждой папки (False).
-        rag_mode: "common" — одна общая база на все файлы; "per_file" — отдельная база на каждый PDF.
+        recursive: Искать файлы во вложенных папках (True) или только в корне каждой папки (False).
+        rag_mode: "common" — одна общая база на все файлы; "per_file" — отдельная база на каждый файл.
     """
     start_time = time.time()
     sep_info = "с вложенными папками" if recursive else "только в корне"
     mode_info = "общая база" if rag_mode == "common" else "отдельная база на каждый файл"
-    print(f"Режим: {mode_info}, поиск PDF: {sep_info}\n")
+    print(f"Режим: {mode_info}, поиск файлов: {sep_info}\n")
 
-    pdf_paths = _collect_pdf_paths(source_paths, recursive)
-    if not pdf_paths:
+    extensions = _parse_extensions(os.environ.get("RAG_SOURCE_EXTENSIONS", ""))
+    file_paths = _collect_source_paths(source_paths, recursive, extensions)
+    if not file_paths:
         raise ValueError(
-            "Не найдено ни одного PDF. Проверьте RAG_SOURCE_PATHS и RAG_RECURSIVE."
+            "Не найдено подходящих файлов. Проверьте RAG_SOURCE_PATHS, RAG_RECURSIVE и RAG_SOURCE_EXTENSIONS."
         )
 
-    print(f"Найдено PDF-файлов: {len(pdf_paths)}")
-    for path in pdf_paths[:10]:
+    print(f"Найдено файлов для индексации: {len(file_paths)}")
+    print(f"Расширения источников: {', '.join(sorted(extensions))}")
+    for path in file_paths[:10]:
         print(f"  {path}")
-    if len(pdf_paths) > 10:
-        print(f"  ... и ещё {len(pdf_paths) - 10}")
+    if len(file_paths) > 10:
+        print(f"  ... и ещё {len(file_paths) - 10}")
 
     device = "cuda" if use_gpu else "cpu"
     embeddings = HuggingFaceEmbeddings(
@@ -313,7 +345,7 @@ def create_rag(
 
     if rag_mode == "per_file":
         _run_per_file(
-            pdf_paths=pdf_paths,
+            file_paths=file_paths,
             persist_directory=persist_directory,
             embeddings=embeddings,
             text_splitter=text_splitter,
@@ -324,7 +356,7 @@ def create_rag(
         )
     else:
         _run_common(
-            pdf_paths=pdf_paths,
+            file_paths=file_paths,
             persist_directory=persist_directory,
             embeddings=embeddings,
             text_splitter=text_splitter,
@@ -354,7 +386,7 @@ def main() -> None:
         print("PyTorch не установлен, используется CPU\n")
         use_gpu = False
 
-    persist_directory = os.environ.get("RAG_PERSIST_DIR", "").strip() or "./data/chroma_default"
+    persist_directory = os.environ.get("RAG_PERSIST_DIR", "").strip() or "./storage/chroma/default"
     source_paths_str = os.environ.get("RAG_SOURCE_PATHS", "").strip()
     sep = _path_sep()
     source_paths = [p.strip() for p in source_paths_str.split(sep) if p.strip()] if source_paths_str else []
@@ -365,9 +397,9 @@ def main() -> None:
 
     if not source_paths:
         print(
-            f"Задайте RAG_SOURCE_PATHS (папки и/или файлы PDF, разделитель {sep}).\n"
-            f"Опционально: RAG_RECURSIVE=1|0, RAG_MODE=common|per_file, RAG_PERSIST_DIR.\n"
-            f"Пример: RAG_SOURCE_PATHS=E:\\НОРМАТИВЫ"
+            f"Задайте RAG_SOURCE_PATHS (папки и/или файлы, разделитель {sep}).\n"
+            f"Опционально: RAG_SOURCE_EXTENSIONS=.pdf,.md,.txt,.json, RAG_RECURSIVE=1|0, RAG_MODE=common|per_file, RAG_PERSIST_DIR.\n"
+            f"Пример: RAG_SOURCE_PATHS=./knowledge/docs;./knowledge/code_guides"
         )
         return
 
