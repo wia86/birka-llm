@@ -16,7 +16,6 @@ __pycache__/
 
 # IDE
 .idea/
-.vscode/
 *.swp
 *.swo
 
@@ -36,3 +35,11 @@ build/
 dist/
 *.egg-info/
 *.egg
+
+# Coverage
+.coverage
+htmlcov/
+
+# Jupyter
+.ipynb_checkpoints/
+*.ipynb

@@ -1,0 +1,38 @@
+name: New MCP server
+version: 0.0.1
+schema: v1
+# MCP Servers that Continue can access
+mcpServers:
+  - name: filesystem
+    command: npx
+    args:
+      - -y
+      - "@modelcontextprotocol/server-filesystem"
+      - D:/birka-llm
+    env: {}
+  - name: git
+    command: C:/Users/ADMIN/AppData/Local/Programs/Python/Python314/Scripts/uvx.exe
+    args:
+      - mcp-server-git
+      - --repository
+      - D:/birka-llm
+    env: {}
+  - name: sqlite
+    command: C:/Users/ADMIN/AppData/Local/Programs/Python/Python314/Scripts/uvx.exe
+    args:
+      - mcp-server-sqlite
+      - --db-path
+      - D:/birka-llm/data/chroma_default/chroma_db.sqlite3
+    disabled: true
+    env: {}
+  - name: fetch
+    command: C:/Users/ADMIN/AppData/Local/Programs/Python/Python314/Scripts/uvx.exe
+    args:
+      - mcp-server-fetch
+    env: {}
+  - name: memory
+    command: npx
+    args:
+      - -y
+      - "@modelcontextprotocol/server-memory"
+    env: {}
